@@ -10,6 +10,71 @@ export class MeetingService {
 
   constructor(private personService: PersonService) {}
 
+  private validateInputs(
+    title: string,
+    startTime: Date,
+    participantEmails: string[]
+  ) {
+    if (!title) {
+      throw new Error("Title is missing");
+    }
+
+    if (!startTime || !(startTime instanceof Date)) {
+      throw new Error("Start time is invalid");
+    }
+
+    if (participantEmails.length < 1) {
+      throw new Error("Minimum two participants are required");
+    }
+
+    const uniqueEmails = new Set(participantEmails);
+    if (uniqueEmails.size != participantEmails.length) {
+      throw new Error("Duplicate emails are not allowed");
+    }
+  }
+
+  private validateParticipants(participantEmails: string[]) {
+    return this.personService.findAndGetPersons(participantEmails);
+  }
+
+  private setOrUpdatePersonMeetings(meeting: Meeting) {
+    for (let participantEmail of meeting.participantEmails) {
+      if (!this.personMeetings.has(participantEmail)) {
+        this.personMeetings.set(participantEmail, []);
+      }
+      this.personMeetings.get(participantEmail)?.push(meeting.id);
+    }
+  }
+  private getAllPossibleSlots(startTime: Date, endTime: Date): TimeSlot[] {
+    const slots: TimeSlot[] = [];
+    const currentTime = new Date(startTime);
+
+    if (currentTime.getMinutes() !== 0) {
+      currentTime.setHours(currentTime.getHours() + 1, 0, 0, 0);
+    }
+
+    while (currentTime < endTime) {
+      const slotStart = new Date(currentTime);
+      const slotEnd = new Date(
+        currentTime.getTime() + MeetingService.DURARION_IN_MS
+      );
+      if (slotEnd <= endTime) {
+        slots.push({ startTime: slotStart, endTime: slotEnd });
+      }
+
+      currentTime.setHours(currentTime.getHours() + 1);
+    }
+
+    return slots;
+  }
+  private hasConflict(email: string, startTime: Date): boolean {
+    const meetingIds = this.personMeetings.get(email);
+    const totalMeetingIds = meetingIds?.map((id) => this.meetings.get(id));
+    return (
+      totalMeetingIds?.some((meeting) => meeting?.startTime === startTime) ??
+      false
+    );
+  }
   createMeeting(title: string, startTime: Date, participantEmails: string[]) {
     // validate title and the start and end time
     this.validateInputs(title, startTime, participantEmails);
@@ -41,39 +106,6 @@ export class MeetingService {
   getAllMeetings(): Meeting[] {
     return Array.from(this.meetings.values());
   }
-
-  validateInputs(title: string, startTime: Date, participantEmails: string[]) {
-    if (!title) {
-      throw new Error("Title is missing");
-    }
-
-    if (!startTime || !(startTime instanceof Date)) {
-      throw new Error("Start time is invalid");
-    }
-
-    if (participantEmails.length < 1) {
-      throw new Error("Minimum two participants are required");
-    }
-
-    const uniqueEmails = new Set(participantEmails);
-    if (uniqueEmails.size != participantEmails.length) {
-      throw new Error("Duplicate emails are not allowed");
-    }
-  }
-
-  validateParticipants(participantEmails: string[]) {
-    return this.personService.findAndGetPersons(participantEmails);
-  }
-
-  setOrUpdatePersonMeetings(meeting: Meeting) {
-    for (let participantEmail of meeting.participantEmails) {
-      if (!this.personMeetings.has(participantEmail)) {
-        this.personMeetings.set(participantEmail, []);
-      }
-      this.personMeetings.get(participantEmail)?.push(meeting.id);
-    }
-  }
-
   validateAvailabilityOfAllParticipants(
     participantEmails: string[],
     startTime: Date
@@ -85,15 +117,6 @@ export class MeetingService {
         );
       }
     }
-  }
-
-  hasConflict(email: string, startTime: Date): boolean {
-    const meetingIds = this.personMeetings.get(email);
-    const totalMeetingIds = meetingIds?.map((id) => this.meetings.get(id));
-    return (
-      totalMeetingIds?.some((meeting) => meeting?.startTime === startTime) ??
-      false
-    );
   }
 
   getUpcomingMeetings(email: string) {
@@ -130,28 +153,5 @@ export class MeetingService {
     });
 
     return allSlots;
-  }
-
-  getAllPossibleSlots(startTime: Date, endTime: Date): TimeSlot[] {
-    const slots: TimeSlot[] = [];
-    const currentTime = new Date(startTime);
-
-    if (currentTime.getMinutes() !== 0) {
-      currentTime.setHours(currentTime.getHours() + 1, 0, 0, 0);
-    }
-
-    while (currentTime < endTime) {
-      const slotStart = new Date(currentTime);
-      const slotEnd = new Date(
-        currentTime.getTime() + MeetingService.DURARION_IN_MS
-      );
-      if (slotEnd <= endTime) {
-        slots.push({ startTime: slotStart, endTime: slotEnd });
-      }
-
-      currentTime.setHours(currentTime.getHours() + 1);
-    }
-
-    return slots;
   }
 }
